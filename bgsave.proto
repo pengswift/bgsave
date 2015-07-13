@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package proto;
+
+service BgSaveService {
+    rpc MarkDirty(BgSave.Key) returns (BgSave.NullResult) {}
+    rpc MarkDirties(BgSave.Keys) returns (BgSave.NullResult) {}
+}
+
+message BgSave {
+    message Key {
+        string name=1;
+    }
+
+    message Keys {
+        repeated string names=1;
+    }
+
+    message NullResult {
+
+    }
+}

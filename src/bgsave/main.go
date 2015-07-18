@@ -1,10 +1,20 @@
 package main
 
 import (
-	"google.golang.org/grpc"
-	"log"
 	"net"
+	"os"
+)
 
+import (
+	"google.golang.org/grpc"
+)
+
+import (
+	log "github.com/pengswift/gamelibs/nsq-logger"
+	_ "github.com/pengswift/gamelibs/statsd-pprof"
+)
+
+import (
 	pb "proto"
 )
 
@@ -13,11 +23,14 @@ const (
 )
 
 func main() {
+	log.SetPrefix(SERVICE)
+
 	lis, err := net.Listen("tcp", _port)
 	if err != nil {
-		log.Fatal(err)
+		log.Critical(err)
+		os.Exit(-1)
 	}
-	log.Println("listening on ", lis.Addr())
+	log.Info("listening on ", lis.Addr())
 
 	s := grpc.NewServer()
 	ins := &server{}

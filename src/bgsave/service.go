@@ -1,21 +1,33 @@
 package main
 
 import (
-	"github.com/fzzy/radix/extra/cluster"
-	"github.com/golang/snappy/snappy"
-	"golang.org/x/net/context"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
-	"gopkg.in/vmihailenco/msgpack.v2"
-	"log"
 	"os"
 	"os/signal"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+)
 
+import (
+	"github.com/fzzy/radix/extra/cluster"
+	"github.com/golang/snappy/snappy"
+	"golang.org/x/net/context"
+	"gopkg.in/mgo.v2"
+	"gopkg.in/mgo.v2/bson"
+	"gopkg.in/vmihailenco/msgpack.v2"
+)
+
+import (
+	log "github.com/pengswift/gamelibs/nsq-logger"
+)
+
+import (
 	pb "proto"
+)
+
+const (
+	SERVICE = "[BGSAVE]"
 )
 
 const (
@@ -51,7 +63,8 @@ func (s *server) init() {
 	// start connection to redis cluster
 	client, err := cluster.NewCluster(redis_host)
 	if err != nil {
-		log.Fatal(err)
+		log.Critical(err)
+		os.Exit(-1)
 	}
 
 	//存放redis client 句柄
@@ -66,8 +79,8 @@ func (s *server) init() {
 	// start connection to mongodb
 	sess, err := mgo.Dial(mongodb_url)
 	if err != nil {
-		println("..........mongodb_url err.............")
-		log.Fatal(err)
+		log.Critical(err)
+		os.Exit(-1)
 	}
 
 	s.db = sess.DB("")
@@ -117,14 +130,15 @@ func (s *server) loader_task() {
 			timer = time.After(SAVE_DELAY)
 		case <-timer_count:
 			//打印计数
-			log.Println("num records saved:", count)
+			log.Info("num records saved:", count)
 			timer_count = time.After(COUNT_DELAY)
 		case <-sig:
 			//当有关闭信号发送时
 			if len(dirty) > 0 {
 				s.dump(dirty)
 			}
-			log.Fatal("SIGTERM")
+			log.Info("SIGTERM")
+			os.Exit(0)
 		}
 	}
 }
@@ -134,7 +148,7 @@ func (s *server) dump(dirty map[string]bool) {
 	for k := range dirty {
 		raw, err := s.redis_client.Cmd("GET", k).Bytes()
 		if err != nil {
-			log.Println(err)
+			log.Critical(err)
 			continue
 		}
 
@@ -143,7 +157,7 @@ func (s *server) dump(dirty map[string]bool) {
 			if dec, err := snappy.Decode(nil, raw); err == nil {
 				raw = dec
 			} else {
-				log.Println(err)
+				log.Critical(err)
 				continue
 			}
 		}
@@ -152,14 +166,14 @@ func (s *server) dump(dirty map[string]bool) {
 		//反序列化
 		err = msgpack.Unmarshal(raw, &record)
 		if err != nil {
-			log.Println(err)
+			log.Critical(err)
 			continue
 		}
 
 		//分隔拿到key和value
 		strs := strings.Split(k, ":")
 		if len(strs) != 2 {
-			log.Println("canot split key", k)
+			log.Critical("canot split key", k)
 			continue
 		}
 
@@ -167,14 +181,14 @@ func (s *server) dump(dirty map[string]bool) {
 
 		id, err := strconv.Atoi(id_str)
 		if err != nil {
-			log.Println(err)
+			log.Critical(err)
 			continue
 		}
 
 		// save data to mongodb
 		_, err = s.db.C(tblname).Upsert(bson.M{"Id": id}, record)
 		if err != nil {
-			log.Println(err)
+			log.Critical(err)
 			continue
 		}
 	}
